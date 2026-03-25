@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TeraBox Stream Player</title>
+
+<style>
+body {
+    background: #111;
+    color: #fff;
+    text-align: center;
+    font-family: Arial;
+}
+input, button {
+    padding: 10px;
+    margin: 10px;
+    width: 300px;
+}
+video {
+    width: 80%;
+    max-width: 800px;
+    margin-top: 20px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>TeraBox Stream Player</h2>
+
+<input type="text" id="urlInput" placeholder="Enter Terabox URL">
+<br>
+<button onclick="loadStream()">Play</button>
+
+<p id="info"></p>
+
+<video id="videoPlayer" controls autoplay muted></video>
+
+<script>
+async function loadStream() {
+    const inputUrl = document.getElementById("urlInput").value;
+    const info = document.getElementById("info");
+    const video = document.getElementById("videoPlayer");
+
+    info.innerText = "Loading...";
+
+    const payload = {
+        url: inputUrl
+    };
+
+    try {
+        // 🔥 Try direct API first
+        let response = await fetch("https://teraboxdl.site/api/proxy", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+        });
+
+        // ❌ If blocked, use proxy
+        if (!response.ok) {
+            throw new Error("Direct failed");
+        }
+
+        let data = await response.json();
+        handleData(data);
+
+    } catch (e) {
+        console.log("Direct failed, using proxy...");
+
+        try {
+            // 🔥 Proxy fallback
+            let proxyResponse = await fetch("https://corsproxy.io/?https://teraboxdl.site/api/proxy", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+
+            let text = await proxyResponse.text();
+            let data = JSON.parse(text);
+
+            handleData(data);
+
+        } catch (err) {
+            console.error(err);
+            info.innerText = "❌ Failed to load stream (CORS blocked)";
+        }
+    }
+
+    function handleData(data) {
+        if (!data.list || data.list.length === 0) {
+            info.innerText = "No files found";
+            return;
+        }
+
+        const file = data.list[0];
+
+        info.innerHTML = `
+            File: ${file.server_filename} <br>
+            Size: ${file.formatted_size}
+        `;
+
+        video.src = file.stream_url;
+        video.play();
+    }
+}
+</script>
+
+</body>
+</html>
