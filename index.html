@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terabox Multi-Source Player</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0f0f0f; color: #efefef; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { width: 100%; max-width: 900px; }
+        
+        .input-group { 
+            background: #1e1e1e; padding: 20px; border-radius: 8px; margin-bottom: 20px; 
+            border: 1px solid #333; display: flex; flex-direction: column; gap: 15px; 
+        }
+        
+        .manual-input { display: flex; gap: 10px; }
+        input[type="text"] { flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #444; background: #121212; color: white; }
+        input[type="file"] { color: #aaa; }
+        
+        button { padding: 10px 20px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; font-weight: bold; }
+        button:hover { background: #0056b3; }
+
+        #playlist { 
+            list-style: none; padding: 0; max-height: 250px; overflow-y: auto; 
+            background: #181818; border-radius: 4px; border: 1px solid #333;
+        }
+        #playlist li { 
+            padding: 12px; border-bottom: 1px solid #222; cursor: pointer; 
+            font-size: 13px; color: #bbb; display: flex; justify-content: space-between;
+        }
+        #playlist li:hover { background: #252525; color: #fff; }
+        #playlist li.active { border-left: 4px solid #007bff; background: #252525; color: #fff; }
+
+        video { width: 100%; border-radius: 8px; background: #000; margin-top: 20px; box-shadow: 0 4px 30px rgba(0,0,0,0.7); }
+        .status { color: #ffab00; margin: 10px 0; font-size: 14px; min-height: 20px; }
+        h3 { margin-bottom: 10px; color: #fff; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Terabox Media Hub</h2>
+    
+    <div class="input-group">
+        <div>
+            <h3>Add Individual Link</h3>
+            <div class="manual-input">
+                <input type="text" id="manualUrl" placeholder="Paste single Terabox URL here...">
+                <button onclick="addManualLink()">Add & Play</button>
+            </div>
+        </div>
+
+        <hr style="width:100%; border: 0; border-top: 1px solid #333;">
+
+        <div>
+            <h3>Upload stat.txt (Bulk)</h3>
+            <input type="file" id="fileInput" accept=".txt">
+        </div>
+    </div>
+
+    <p id="status" class="status">Ready.</p>
+
+    <ul id="playlist">
+        <li style="cursor: default; font-style: italic;">No videos loaded yet...</li>
+    </ul>
+
+    <video id="videoPlayer" controls autoplay>
+        Your browser does not support the video tag.
+    </video>
+</div>
+
+<script>
+    const fileInput = document.getElementById('fileInput');
+    const manualInput = document.getElementById('manualUrl');
+    const playlistEl = document.getElementById('playlist');
+    const status = document.getElementById('status');
+    const player = document.getElementById('videoPlayer');
+
+    // 1. Handle Manual Individual Link
+    function addManualLink() {
+        const url = manualInput.value.trim();
+        if (url.includes('/s/1')) {
+            const links = [url];
+            renderPlaylist(links, true); // Append to list
+            playVideo(url);
+            manualInput.value = '';
+        } else {
+            status.innerText = "Error: Invalid Terabox URL format.";
+        }
+    }
+
+    // 2. Handle Bulk File Upload
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const content = e.target.result;
+            // Matches any line containing /s/1 
+            const links = content.split(/\r?\n/).filter(line => line.includes('/s/1'));
+            renderPlaylist(links, false); // Overwrite list with file content
+        };
+        reader.readAsText(file);
+    });
+
+    function renderPlaylist(links, append = false) {
+        if (!append) playlistEl.innerHTML = '';
+        else if (playlistEl.innerText.includes("No videos loaded")) playlistEl.innerHTML = '';
+
+        links.forEach((link) => {
+            const li = document.createElement('li');
+            const shortId = link.split("/s/1").pop();
+            li.innerHTML = `<span>Video ID: ${shortId}</span> <small>Click to play</small>`;
+            li.setAttribute('data-url', link);
+            li.onclick = () => {
+                setActive(li);
+                playVideo(link);
+            };
+            playlistEl.appendChild(li);
+        });
+
+        status.innerText = `Library updated. Total links: ${playlistEl.children.length}`;
+    }
+
+    function setActive(element) {
+        document.querySelectorAll('#playlist li').forEach(el => el.classList.remove('active'));
+        element.classList.add('active');
+    }
+
+    async function playVideo(url) {
+        const result = url.split("/s/1").pop();
+        // Using a CORS proxy to bypass browser security restrictions
+        const apiUrl = `https://corsproxy.io/?https://core.mdiskplay.com/box/terabox/${result}?aka=baka`;
+
+        status.innerText = "Resolving video stream...";
+        
+        try {
+            const response = await fetch(apiUrl);
+            const data = await response.json();
+
+            if (data && data.source) {
+                status.innerText = "Streaming now...";
+                player.src = data.source;
+                player.scrollIntoView({ behavior: 'smooth' });
+            } else {
+                status.innerText = "Error: API did not return a valid source.";
+            }
+        } catch (error) {
+            status.innerText = "Fetch failed. Possible CORS block or network error.";
+            console.error(error);
+        }
+    }
+</script>
+
+</body>
+</html>
